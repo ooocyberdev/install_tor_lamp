@@ -6,6 +6,9 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+# Генерация случайного пароля для MySQL root
+DB_ROOT_PASSWORD=$(openssl rand -base64 16 | tr -d '+=/' | cut -c1-16)
+
 # Обновление системы
 echo "Обновление пакетов системы..."
 apt-get update && apt-get upgrade -y
@@ -14,8 +17,18 @@ apt-get update && apt-get upgrade -y
 echo "Установка Apache, PHP, MySQL..."
 apt-get install -y apache2 mysql-server php libapache2-mod-php php-mysql
 
-# Установка phpMyAdmin
+# Настройка MySQL с автоматическим паролем
+echo "Настройка MySQL с автоматически сгенерированным паролем..."
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# Установка phpMyAdmin с автоматической настройкой
 echo "Установка phpMyAdmin..."
+debconf-set-selections <<< "phpmyadmin phpmyadmin/dbconfig-install boolean true"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/app-password-confirm password ${DB_ROOT_PASSWORD}"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/admin-pass password ${DB_ROOT_PASSWORD}"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/app-pass password ${DB_ROOT_PASSWORD}"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/reconfigure-webserver multiselect apache2"
 apt-get install -y phpmyadmin
 
 # Настройка Apache для phpMyAdmin
@@ -24,18 +37,13 @@ ln -s /etc/phpmyadmin/apache.conf /etc/apache2/conf-available/phpmyadmin.conf
 a2enconf phpmyadmin
 systemctl reload apache2
 
-# Настройка MySQL
-echo "Настройка MySQL..."
-mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '';"
-mysql -e "FLUSH PRIVILEGES;"
-
 # Установка TOR
 echo "Установка TOR..."
 apt-get install -y tor
 
 # Настройка TOR для скрытого сервиса
 echo "Настройка TOR скрытого сервиса..."
-mkdir /var/www/tor-site
+mkdir -p /var/www/tor-site
 chown www-data:www-data /var/www/tor-site
 chmod 700 /var/www/tor-site
 
@@ -80,7 +88,7 @@ echo "Ожидание создания onion-адреса..."
 sleep 10
 
 # Вывод информации
-ONION_ADDRESS=$(cat /var/lib/tor/hidden_service/hostname)
+ONION_ADDRESS=$(cat /var/lib/tor/hidden_service/hostname 2>/dev/null)
 
 echo ""
 echo "=============================================="
@@ -90,10 +98,12 @@ echo ""
 echo "Данные для подключения к MySQL:"
 echo "Хост: localhost"
 echo "Пользователь: root"
-echo "Пароль: (пустой)"
+echo "Пароль: ${DB_ROOT_PASSWORD}"
 echo "Порт: 3306"
 echo ""
 echo "Корневая директория сайта: /var/www/tor-site"
 echo "phpMyAdmin доступен по пути: /phpmyadmin"
+echo ""
+echo "ВАЖНО: Сохраните эти данные, особенно пароль root MySQL!"
 echo "=============================================="
 echo ""
