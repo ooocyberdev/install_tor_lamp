@@ -17,30 +17,52 @@ apt-get update && apt-get upgrade -y
 echo "🔧 Установка Apache и MySQL..."
 apt-get install -y apache2 mysql-server
 
-# Установка PHP 8.x (последней версии)
-echo "🐘 Установка PHP 8.x..."
+# Установка PHP 8.2 (LTS версия)
+echo "🐘 Установка PHP 8.2..."
 apt-get install -y software-properties-common
 add-apt-repository -y ppa:ondrej/php
 apt-get update
-apt-get install -y php8.2 php8.2-mysql libapache2-mod-php8.2 php8.2-common php8.2-mbstring php8.2-curl php8.2-zip php8.2-xml
+apt-get install -y php8.2 php8.2-mysql libapache2-mod-php8.2 php8.2-common php8.2-mbstring php8.2-curl php8.2-zip php8.2-xml php8.2-intl
 
 # Настройка MySQL с автоматическим паролем
 echo "🔐 Настройка MySQL (пароль root: $DB_ROOT_PASSWORD)..."
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
 mysql -e "FLUSH PRIVILEGES;"
 
-# Установка последней версии phpMyAdmin
-echo "📊 Установка phpMyAdmin (совместимой с PHP 8.x)..."
+# Установка последней совместимой версии phpMyAdmin
+echo "📊 Установка phpMyAdmin 5.2.1 (специально для PHP 8.2)..."
 cd /usr/share || exit
-wget https://www.phpmyadmin.net/downloads/phpMyAdmin-latest-all-languages.tar.gz
-tar xzf phpMyAdmin-latest-all-languages.tar.gz
-rm phpMyAdmin-latest-all-languages.tar.gz
-mv phpMyAdmin-*-all-languages phpmyadmin
+wget https://files.phpmyadmin.net/phpMyAdmin/5.2.1/phpMyAdmin-5.2.1-all-languages.tar.gz
+tar xzf phpMyAdmin-5.2.1-all-languages.tar.gz
+rm phpMyAdmin-5.2.1-all-languages.tar.gz
+mv phpMyAdmin-5.2.1-all-languages phpmyadmin
 chown -R www-data:www-data phpmyadmin
 chmod -R 755 phpmyadmin
 
+# Создание временного каталога для phpMyAdmin
+mkdir /usr/share/phpmyadmin/tmp
+chown www-data:www-data /usr/share/phpmyadmin/tmp
+chmod 777 /usr/share/phpmyadmin/tmp
+
 # Создание конфигурационного файла phpMyAdmin
 echo "🔧 Настройка phpMyAdmin..."
+BLOWFISH_SECRET=$(openssl rand -base64 32)
+cat > /usr/share/phpmyadmin/config.inc.php <<EOL
+<?php
+\$cfg['blowfish_secret'] = '$BLOWFISH_SECRET';
+\$cfg['TempDir'] = '/usr/share/phpmyadmin/tmp';
+\$i = 0;
+\$i++;
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['host'] = 'localhost';
+\$cfg['Servers'][\$i]['connect_type'] = 'tcp';
+\$cfg['Servers'][\$i]['compress'] = false;
+\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
+\$cfg['UploadDir'] = '';
+\$cfg['SaveDir'] = '';
+EOL
+
+# Настройка Apache для phpMyAdmin
 cat > /etc/apache2/conf-available/phpmyadmin.conf <<EOL
 Alias /phpmyadmin /usr/share/phpmyadmin
 <Directory /usr/share/phpmyadmin>
@@ -53,25 +75,6 @@ EOL
 
 a2enconf phpmyadmin
 systemctl reload apache2
-
-# Создание конфига phpMyAdmin
-cat > /usr/share/phpmyadmin/config.inc.php <<EOL
-<?php
-\$cfg['blowfish_secret'] = '$(openssl rand -base64 32)';
-\$i = 0;
-\$i++;
-\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
-\$cfg['Servers'][\$i]['host'] = 'localhost';
-\$cfg['Servers'][\$i]['connect_type'] = 'tcp';
-\$cfg['Servers'][\$i]['compress'] = false;
-\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
-\$cfg['UploadDir'] = '';
-\$cfg['SaveDir'] = '';
-\$cfg['TempDir'] = '/tmp';
-EOL
-
-chown www-data:www-data /usr/share/phpmyadmin/config.inc.php
-chmod 660 /usr/share/phpmyadmin/config.inc.php
 
 # Установка Tor
 echo "🧅 Установка Tor..."
@@ -92,7 +95,7 @@ EOL
 echo "📝 Создание тестовой страницы (index.php)..."
 cat > /var/www/tor-site/index.php <<EOL
 <html>
-<head><title>Onion Site (PHP 8.x)</title></head>
+<head><title>Onion Site (PHP 8.2)</title></head>
 <body>
 <h1>Добро пожаловать на ваш onion-сайт!</h1>
 <p>Это тестовая страница вашего скрытого сервиса.</p>
