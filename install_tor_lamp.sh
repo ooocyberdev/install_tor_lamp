@@ -22,27 +22,56 @@ echo "🐘 Установка PHP 8.x..."
 apt-get install -y software-properties-common
 add-apt-repository -y ppa:ondrej/php
 apt-get update
-apt-get install -y php8.2 php8.2-mysql libapache2-mod-php8.2 php8.2-common php8.2-mbstring
+apt-get install -y php8.2 php8.2-mysql libapache2-mod-php8.2 php8.2-common php8.2-mbstring php8.2-curl php8.2-zip php8.2-xml
 
 # Настройка MySQL с автоматическим паролем
 echo "🔐 Настройка MySQL (пароль root: $DB_ROOT_PASSWORD)..."
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
 mysql -e "FLUSH PRIVILEGES;"
 
-# Установка phpMyAdmin с автоматической настройкой
-echo "📊 Установка phpMyAdmin..."
-debconf-set-selections <<< "phpmyadmin phpmyadmin/dbconfig-install boolean true"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/app-password-confirm password ${DB_ROOT_PASSWORD}"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/admin-pass password ${DB_ROOT_PASSWORD}"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/app-pass password ${DB_ROOT_PASSWORD}"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/reconfigure-webserver multiselect apache2"
-apt-get install -y phpmyadmin
+# Установка последней версии phpMyAdmin
+echo "📊 Установка phpMyAdmin (совместимой с PHP 8.x)..."
+cd /usr/share || exit
+wget https://www.phpmyadmin.net/downloads/phpMyAdmin-latest-all-languages.tar.gz
+tar xzf phpMyAdmin-latest-all-languages.tar.gz
+rm phpMyAdmin-latest-all-languages.tar.gz
+mv phpMyAdmin-*-all-languages phpmyadmin
+chown -R www-data:www-data phpmyadmin
+chmod -R 755 phpmyadmin
 
-# Настройка Apache для phpMyAdmin
-echo "🔧 Настройка Apache..."
-ln -s /etc/phpmyadmin/apache.conf /etc/apache2/conf-available/phpmyadmin.conf
+# Создание конфигурационного файла phpMyAdmin
+echo "🔧 Настройка phpMyAdmin..."
+cat > /etc/apache2/conf-available/phpmyadmin.conf <<EOL
+Alias /phpmyadmin /usr/share/phpmyadmin
+<Directory /usr/share/phpmyadmin>
+    Options SymLinksIfOwnerMatch
+    DirectoryIndex index.php
+    AllowOverride All
+    Require all granted
+</Directory>
+EOL
+
 a2enconf phpmyadmin
 systemctl reload apache2
+
+# Создание конфига phpMyAdmin
+cat > /usr/share/phpmyadmin/config.inc.php <<EOL
+<?php
+\$cfg['blowfish_secret'] = '$(openssl rand -base64 32)';
+\$i = 0;
+\$i++;
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['host'] = 'localhost';
+\$cfg['Servers'][\$i]['connect_type'] = 'tcp';
+\$cfg['Servers'][\$i]['compress'] = false;
+\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
+\$cfg['UploadDir'] = '';
+\$cfg['SaveDir'] = '';
+\$cfg['TempDir'] = '/tmp';
+EOL
+
+chown www-data:www-data /usr/share/phpmyadmin/config.inc.php
+chmod 660 /usr/share/phpmyadmin/config.inc.php
 
 # Установка Tor
 echo "🧅 Установка Tor..."
