@@ -29,14 +29,14 @@
 
 ## 🚀 Быстрый старт
 
-```bash
+
 # Скачать скрипт
-wget https://raw.githubusercontent.com/ooocyberdev/install_tor_lamp/refs/heads/main/install_tor_lamp.sh
+```bash wget https://raw.githubusercontent.com/ooocyberdev/install_tor_lamp/refs/heads/main/install_tor_lamp.sh
 # Дать права на выполнение
-chmod +x installer.sh
+```bash chmod +x installer.sh
 # Запустить установку
-sudo ./installer.sh
-```bash
+```bash sudo ./installer.sh
+
 Пример вывода:
 ==============================================
 ✅ Установка завершена!
