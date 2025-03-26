@@ -29,26 +29,10 @@
 
 ## 🚀 Быстрый старт
 
-
+```bash 
 # Скачать скрипт
-```bash wget https://raw.githubusercontent.com/ooocyberdev/install_tor_lamp/refs/heads/main/install_tor_lamp.sh
+wget https://raw.githubusercontent.com/ooocyberdev/install_tor_lamp/refs/heads/main/install_tor_lamp.sh
 # Дать права на выполнение
-```bash chmod +x installer.sh
+chmod +x installer.sh
 # Запустить установку
-```bash sudo ./installer.sh
-
-Пример вывода:
-==============================================
-✅ Установка завершена!
-
-🌐 Onion URL: http://your_unique_address.onion
-
-🔑 Данные для подключения к MySQL:
-   Хост: localhost
-   Пользователь: root
-   Пароль: XK8qD2wF5tR3yH9j
-   Порт: 3306
-
-📂 Корневая директория сайта: /var/www/tor-site
-📊 phpMyAdmin: http://your_unique_address.onion/phpmyadmin
-==============================================
+sudo ./installer.sh
