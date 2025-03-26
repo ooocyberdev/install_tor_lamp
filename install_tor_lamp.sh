@@ -39,24 +39,16 @@ check_error "Ошибка установки Apache2"
 systemctl enable --now apache2
 check_error "Ошибка запуска Apache2"
 
-# Установка MySQL с альтернативной настройкой
-echo -e "${YELLOW}4. Установка и настройка MySQL...${NC}"
+# Установка MySQL (без изменения пароля)
+echo -e "${YELLOW}4. Установка MySQL...${NC}"
 if ! command -v mysql &> /dev/null; then
     apt-get install -y mysql-server
     check_error "Ошибка установки MySQL"
-fi
-
-# Альтернативный метод настройки MySQL
-if mysql -u root -e "SELECT 1" &> /dev/null; then
-    echo -e "${YELLOW}MySQL уже настроен, пропускаем настройку пароля${NC}"
+    systemctl enable --now mysql
+    check_error "Ошибка запуска MySQL"
 else
-    echo -e "${YELLOW}Настройка пароля root для MySQL...${NC}"
-    sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'SecurePass123!'; FLUSH PRIVILEGES;"
-    check_error "Не удалось установить пароль MySQL"
+    echo -e "${YELLOW}MySQL уже установлен, используем существующую конфигурацию${NC}"
 fi
-
-systemctl enable --now mysql
-check_error "Ошибка запуска MySQL"
 
 # Установка PHP из официального PPA
 echo -e "${YELLOW}5. Установка PHP 8.2...${NC}"
@@ -69,7 +61,7 @@ apt-get install -y php8.2 libapache2-mod-php8.2 \
                    php8.2-xml php8.2-zip php8.2-intl
 check_error "Ошибка установки PHP"
 
-# Установка phpMyAdmin
+# Установка phpMyAdmin (пропускаем настройку пароля)
 echo -e "${YELLOW}6. Установка phpMyAdmin...${NC}"
 apt-get install -y phpmyadmin
 check_error "Ошибка установки phpMyAdmin"
@@ -143,7 +135,7 @@ cat > /var/www/html/index.php <<EOF
         <p><strong>Onion-адрес:</strong> <span class="success">$ONION_ADDR</span></p>
         <p><strong>Корневая директория сайта:</strong> <span class="success">/var/www/html/</span></p>
         <p><strong>Доступ к phpMyAdmin:</strong> <span class="success">http://$ONION_ADDR/phpmyadmin</span></p>
-        <p><strong>Данные для входа:</strong> Логин: root, Пароль: SecurePass123!</p>
+        <p><strong>Примечание:</strong> Используются текущие учётные данные MySQL сервера</p>
     </div>
 </body>
 </html>
@@ -157,7 +149,5 @@ echo -e "${GREEN}=== Установка завершена успешно! ===${
 echo -e "${YELLOW}1. Ваш onion-адрес:${NC} ${GREEN}http://$ONION_ADDR${NC}"
 echo -e "${YELLOW}2. Корневая директория сайта:${NC} ${GREEN}/var/www/html/${NC}"
 echo -e "${YELLOW}3. phpMyAdmin доступен по:${NC} ${GREEN}http://$ONION_ADDR/phpmyadmin${NC}"
-echo -e "${YELLOW}4. Данные для входа:${NC}"
-echo -e "   - Логин: ${GREEN}root${NC}"
-echo -e "   - Пароль: ${GREEN}SecurePass123!${NC}"
+echo -e "${YELLOW}4. Используются текущие учётные данные MySQL сервера${NC}"
 echo -e "${YELLOW}5. Доступ через:${NC} Tor Browser"
