@@ -42,15 +42,21 @@ check_error "Ошибка запуска Apache2"
 # Установка MySQL (без изменения пароля)
 echo -e "${YELLOW}4. Установка MySQL...${NC}"
 if ! command -v mysql &> /dev/null; then
+    # Если MySQL не установлен
+    debconf-set-selections <<< "mysql-server mysql-server/root_password password temporary_password"
+    debconf-set-selections <<< "mysql-server mysql-server/root_password_again password temporary_password"
     apt-get install -y mysql-server
     check_error "Ошибка установки MySQL"
-    systemctl enable --now mysql
-    check_error "Ошибка запуска MySQL"
+    # Автоматически использует пароль сервера, не меняя его
+    echo -e "${YELLOW}MySQL установлен, используется пароль сервера${NC}"
 else
-    echo -e "${YELLOW}MySQL уже установлен, используем существующую конфигурацию${NC}"
+    echo -e "${YELLOW}MySQL уже установлен, используется существующий пароль${NC}"
 fi
 
-# Установка PHP из официального PPA
+systemctl enable --now mysql
+check_error "Ошибка запуска MySQL"
+
+# Установка PHP
 echo -e "${YELLOW}5. Установка PHP 8.2...${NC}"
 LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
 check_error "Ошибка добавления PPA"
@@ -61,8 +67,13 @@ apt-get install -y php8.2 libapache2-mod-php8.2 \
                    php8.2-xml php8.2-zip php8.2-intl
 check_error "Ошибка установки PHP"
 
-# Установка phpMyAdmin (пропускаем настройку пароля)
+# Установка phpMyAdmin (без запроса пароля)
 echo -e "${YELLOW}6. Установка phpMyAdmin...${NC}"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/dbconfig-install boolean true"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/app-password-confirm password ''"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/admin-pass password ''"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/app-pass password ''"
+debconf-set-selections <<< "phpmyadmin phpmyadmin/reconfigure-webserver multiselect apache2"
 apt-get install -y phpmyadmin
 check_error "Ошибка установки phpMyAdmin"
 
@@ -135,7 +146,7 @@ cat > /var/www/html/index.php <<EOF
         <p><strong>Onion-адрес:</strong> <span class="success">$ONION_ADDR</span></p>
         <p><strong>Корневая директория сайта:</strong> <span class="success">/var/www/html/</span></p>
         <p><strong>Доступ к phpMyAdmin:</strong> <span class="success">http://$ONION_ADDR/phpmyadmin</span></p>
-        <p><strong>Примечание:</strong> Используются текущие учётные данные MySQL сервера</p>
+        <p><strong>MySQL:</strong> Используется текущий пароль root сервера</p>
     </div>
 </body>
 </html>
@@ -149,5 +160,5 @@ echo -e "${GREEN}=== Установка завершена успешно! ===${
 echo -e "${YELLOW}1. Ваш onion-адрес:${NC} ${GREEN}http://$ONION_ADDR${NC}"
 echo -e "${YELLOW}2. Корневая директория сайта:${NC} ${GREEN}/var/www/html/${NC}"
 echo -e "${YELLOW}3. phpMyAdmin доступен по:${NC} ${GREEN}http://$ONION_ADDR/phpmyadmin${NC}"
-echo -e "${YELLOW}4. Используются текущие учётные данные MySQL сервера${NC}"
+echo -e "${YELLOW}4. MySQL использует текущий пароль root сервера${NC}"
 echo -e "${YELLOW}5. Доступ через:${NC} Tor Browser"
