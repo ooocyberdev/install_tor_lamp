@@ -1,164 +1,99 @@
 #!/bin/bash
 
-# Проверка root-прав
+# Проверка на root-права
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Запустите скрипт с правами root: sudo $0" >&2
-    exit 1
+  echo "Этот скрипт должен запускаться с правами root" >&2
+  exit 1
 fi
-
-# Цвета для вывода
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-# Функция проверки ошибок
-check_error() {
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}[ОШИБКА] $1${NC}" >&2
-        exit 1
-    fi
-}
-
-echo -e "${YELLOW}=== Начало установки LAMP + Tor ===${NC}"
-
-# Установка базовых зависимостей
-echo -e "${YELLOW}1. Установка необходимых компонентов...${NC}"
-apt-get install -y software-properties-common curl gnupg2
-check_error "Ошибка установки зависимостей"
 
 # Обновление системы
-echo -e "${YELLOW}2. Обновление пакетов...${NC}"
-apt-get update -y && apt-get upgrade -y
-check_error "Не удалось обновить пакеты"
+echo "Обновление пакетов системы..."
+apt-get update && apt-get upgrade -y
 
-# Установка Apache2
-echo -e "${YELLOW}3. Установка Apache2...${NC}"
-apt-get install -y apache2
-check_error "Ошибка установки Apache2"
-systemctl enable --now apache2
-check_error "Ошибка запуска Apache2"
+# Установка LAMP
+echo "Установка Apache, PHP, MySQL..."
+apt-get install -y apache2 mysql-server php libapache2-mod-php php-mysql
 
-# Установка MySQL (без изменения пароля)
-echo -e "${YELLOW}4. Установка MySQL...${NC}"
-if ! command -v mysql &> /dev/null; then
-    # Если MySQL не установлен
-    debconf-set-selections <<< "mysql-server mysql-server/root_password password temporary_password"
-    debconf-set-selections <<< "mysql-server mysql-server/root_password_again password temporary_password"
-    apt-get install -y mysql-server
-    check_error "Ошибка установки MySQL"
-    # Автоматически использует пароль сервера, не меняя его
-    echo -e "${YELLOW}MySQL установлен, используется пароль сервера${NC}"
-else
-    echo -e "${YELLOW}MySQL уже установлен, используется существующий пароль${NC}"
-fi
-
-systemctl enable --now mysql
-check_error "Ошибка запуска MySQL"
-
-# Установка PHP
-echo -e "${YELLOW}5. Установка PHP 8.2...${NC}"
-LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
-check_error "Ошибка добавления PPA"
-apt-get update -y
-apt-get install -y php8.2 libapache2-mod-php8.2 \
-                   php8.2-mysql php8.2-curl \
-                   php8.2-gd php8.2-mbstring \
-                   php8.2-xml php8.2-zip php8.2-intl
-check_error "Ошибка установки PHP"
-
-# Установка phpMyAdmin (без запроса пароля)
-echo -e "${YELLOW}6. Установка phpMyAdmin...${NC}"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/dbconfig-install boolean true"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/app-password-confirm password ''"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/admin-pass password ''"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/mysql/app-pass password ''"
-debconf-set-selections <<< "phpmyadmin phpmyadmin/reconfigure-webserver multiselect apache2"
+# Установка phpMyAdmin
+echo "Установка phpMyAdmin..."
 apt-get install -y phpmyadmin
-check_error "Ошибка установки phpMyAdmin"
 
-# Настройка Apache
-echo -e "${YELLOW}7. Настройка Apache...${NC}"
-sed -i 's/index.html/index.php index.html/' /etc/apache2/mods-enabled/dir.conf
-ln -s /usr/share/phpmyadmin /var/www/html/phpmyadmin
-systemctl restart apache2
-check_error "Ошибка перезапуска Apache2"
+# Настройка Apache для phpMyAdmin
+echo "Настройка Apache для phpMyAdmin..."
+ln -s /etc/phpmyadmin/apache.conf /etc/apache2/conf-available/phpmyadmin.conf
+a2enconf phpmyadmin
+systemctl reload apache2
 
-# Установка Tor
-echo -e "${YELLOW}8. Установка Tor...${NC}"
+# Настройка MySQL
+echo "Настройка MySQL..."
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# Установка TOR
+echo "Установка TOR..."
 apt-get install -y tor
-check_error "Ошибка установки Tor"
 
-# Настройка скрытого сервиса
-echo -e "${YELLOW}9. Настройка скрытого сервиса Tor...${NC}"
-mkdir -p /var/lib/tor/hidden_service
-chown debian-tor:debian-tor /var/lib/tor/hidden_service
-chmod 700 /var/lib/tor/hidden_service
+# Настройка TOR для скрытого сервиса
+echo "Настройка TOR скрытого сервиса..."
+mkdir /var/www/tor-site
+chown www-data:www-data /var/www/tor-site
+chmod 700 /var/www/tor-site
 
-cat >> /etc/tor/torrc <<EOF
+cat >> /etc/tor/torrc <<EOL
 HiddenServiceDir /var/lib/tor/hidden_service/
 HiddenServicePort 80 127.0.0.1:80
-HiddenServicePort 443 127.0.0.1:443
-EOF
-
-systemctl restart tor
-check_error "Ошибка перезапуска Tor"
-
-# Ожидание генерации onion-адреса
-echo -e "${YELLOW}10. Ожидание генерации onion-адреса...${NC}"
-for i in {1..12}; do
-    if [ -f "/var/lib/tor/hidden_service/hostname" ]; then
-        break
-    fi
-    echo "Попытка $i из 12: ожидание 10 секунд..."
-    sleep 10
-done
-
-if [ ! -f "/var/lib/tor/hidden_service/hostname" ]; then
-    echo -e "${RED}Ошибка: Tor не сгенерировал onion-адрес${NC}"
-    echo -e "${YELLOW}Попытка ручной генерации...${NC}"
-    sudo -u debian-tor tor --hush -f /etc/tor/torrc --keygen --data-dir /var/lib/tor/hidden_service
-    sleep 10
-fi
+EOL
 
 # Создание тестовой страницы
-echo -e "${YELLOW}11. Создание тестовой страницы...${NC}"
-ONION_ADDR=$(cat /var/lib/tor/hidden_service/hostname 2>/dev/null || echo "не_найден.onion")
-
-cat > /var/www/html/index.php <<EOF
-<!DOCTYPE html>
+echo "Создание тестовой страницы..."
+cat > /var/www/tor-site/index.html <<EOL
 <html>
-<head>
-    <title>Сайт в Tor сети</title>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .success { color: #2ecc71; }
-        .error { color: #e74c3c; }
-        .info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
-    </style>
-</head>
+<head><title>Onion Site</title></head>
 <body>
-    <h1>Ваш сайт работает в Tor сети!</h1>
-    
-    <div class="info">
-        <h2>Основная информация:</h2>
-        <p><strong>Onion-адрес:</strong> <span class="success">$ONION_ADDR</span></p>
-        <p><strong>Корневая директория сайта:</strong> <span class="success">/var/www/html/</span></p>
-        <p><strong>Доступ к phpMyAdmin:</strong> <span class="success">http://$ONION_ADDR/phpmyadmin</span></p>
-        <p><strong>MySQL:</strong> Используется текущий пароль root сервера</p>
-    </div>
+<h1>Добро пожаловать на ваш onion сайт!</h1>
+<p>Это тестовая страница вашего скрытого сервиса.</p>
+<p>Доступ к phpMyAdmin: <a href="/phpmyadmin">/phpmyadmin</a></p>
 </body>
 </html>
-EOF
+EOL
 
-chown -R www-data:www-data /var/www/html/
+# Настройка Apache для tor-site
+cat > /etc/apache2/sites-available/tor-site.conf <<EOL
+<VirtualHost *:80>
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/tor-site
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+EOL
 
-# Итоговая информация
-clear
-echo -e "${GREEN}=== Установка завершена успешно! ===${NC}"
-echo -e "${YELLOW}1. Ваш onion-адрес:${NC} ${GREEN}http://$ONION_ADDR${NC}"
-echo -e "${YELLOW}2. Корневая директория сайта:${NC} ${GREEN}/var/www/html/${NC}"
-echo -e "${YELLOW}3. phpMyAdmin доступен по:${NC} ${GREEN}http://$ONION_ADDR/phpmyadmin${NC}"
-echo -e "${YELLOW}4. MySQL использует текущий пароль root сервера${NC}"
-echo -e "${YELLOW}5. Доступ через:${NC} Tor Browser"
+a2dissite 000-default
+a2ensite tor-site
+systemctl reload apache2
+
+# Перезапуск TOR
+echo "Перезапуск TOR..."
+systemctl restart tor
+
+# Ожидание создания onion-адреса
+echo "Ожидание создания onion-адреса..."
+sleep 10
+
+# Вывод информации
+ONION_ADDRESS=$(cat /var/lib/tor/hidden_service/hostname)
+
+echo ""
+echo "=============================================="
+echo "Установка завершена!"
+echo "Onion URL: http://${ONION_ADDRESS}"
+echo ""
+echo "Данные для подключения к MySQL:"
+echo "Хост: localhost"
+echo "Пользователь: root"
+echo "Пароль: (пустой)"
+echo "Порт: 3306"
+echo ""
+echo "Корневая директория сайта: /var/www/tor-site"
+echo "phpMyAdmin доступен по пути: /phpmyadmin"
+echo "=============================================="
+echo ""
