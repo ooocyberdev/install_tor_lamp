@@ -33,6 +33,6 @@
 # Скачать скрипт
 wget https://raw.githubusercontent.com/ooocyberdev/install_tor_lamp/refs/heads/main/install_tor_lamp.sh
 # Дать права на выполнение
-chmod +x installer.sh
+chmod +x install_tor_lamp.sh
 # Запустить установку
-sudo ./installer.sh
+sudo ./install_tor_lamp.sh
